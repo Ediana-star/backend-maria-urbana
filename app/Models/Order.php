@@ -9,6 +9,7 @@ class Order extends Model
 {
     use HasFactory;
 
+    // ¡Corregido! Ahora tienen guion bajo en vez de espacio
     protected $fillable = [
         'customer_name', 'customer_phone', 'customer_address',
         'total', 'status'

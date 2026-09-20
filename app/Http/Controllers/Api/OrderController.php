@@ -9,41 +9,74 @@ use Illuminate\Http\Request;
 
 class OrderController extends Controller
 {
+    public function index()
+    {
+        $orders = Order::with('items.product')->orderBy('created_at', 'desc')->get();
+        return response()->json($orders);
+    }
+
     public function store(Request $request)
     {
-        // 1. Revisamos que Vue nos haya mandado todo lo necesario
         $request->validate([
             'customer_name' => 'required|string',
             'customer_phone' => 'required|string',
             'customer_address' => 'required|string',
             'total' => 'required|integer',
-            'items' => 'required|array', // Esto es el carrito
+            'items' => 'required|array',
         ]);
 
-        // 2. Anotamos los datos generales de la clienta (Tabla orders)
         $order = Order::create([
             'customer_name' => $request->customer_name,
             'customer_phone' => $request->customer_phone,
             'customer_address' => $request->customer_address,
             'total' => $request->total,
-            'status' => 'pendiente', // Arranca como pendiente para que luego lo apruebes
+            'status' => 'Pendiente',
         ]);
 
-        // 3. Recorremos el carrito y anotamos prenda por prenda (Tabla order_items)
         foreach ($request->items as $item) {
             OrderItem::create([
-                'order_id' => $order->id, // Lo vinculamos al pedido de arriba
+                'order_id' => $order->id,
                 'product_id' => $item['id'],
-                'size' => $item['talle'], // Talle elegido
-                'quantity' => $item['cantidad'], // Cuántas unidades de este talle
-                'price' => $item['precio'], // Guardamos el precio al momento de la compra
+                'size' => $item['talle'],
+                'quantity' => $item['cantidad'],
+                'price' => $item['precio'],
             ]);
         }
 
-        // 4. Le avisamos a Vue que la compra se anotó perfecto
-        return response()->json([
-            'message' => '¡Pedido creado con éxito!',
-            'order_id' => $order->id
-        ], 201);
+        return response()->json(['message' => '¡Pedido creado con éxito!', 'order_id' => $order->id], 201);
+    }
+
+    public function update(Request $request, $id)
+    {
+        $order = Order::findOrFail($id);
+
+        $order->update([
+            'status' => $request->status
+        ]);
+
+        if ($request->status === 'Entregado') {
+            foreach ($order->items as $item) {
+                $product = $item->product;
+                if ($product && $product->stock >= $item->quantity) {
+                    $product->stock = $product->stock - $item->quantity;
+                    $product->save();
+                }
+            }
+        }
+
+        return response()->json(['message' => 'Estado actualizado']);
+    }
+
+    // --- NUEVA FUNCIÓN: Para borrar definitivamente ---
+    public function destroy($id)
+    {
+        $order = Order::findOrFail($id);
+
+        // Primero borramos las prendas asociadas a este pedido para que no queden sueltas
+        $order->items()->delete();
+        // Ahora sí borramos el pedido de la base de datos
+        $order->delete();
+
+        return response()->json(['message' => 'Pedido eliminado de la base de datos']);
     }
 }
