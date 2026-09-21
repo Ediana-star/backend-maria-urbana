@@ -15,57 +15,95 @@ class OrderController extends Controller
         return response()->json($orders);
     }
 
-    public function store(Request $request)
+   public function store(Request $request)
     {
+        // Ya no le exigimos a Vue que nos mande el 'total', lo vamos a calcular nosotros
         $request->validate([
             'customer_name' => 'required|string',
             'customer_phone' => 'required|string',
             'customer_address' => 'required|string',
-            'total' => 'required|integer',
             'items' => 'required|array',
         ]);
 
+        // ACÁ ESTÁ LA MAGIA: Laravel calcula todo de cero
+        $totalReal = 0;
+        $itemsProcesados = [];
+
+        foreach ($request->items as $item) {
+            // Buscamos el producto verdadero y su precio original en la base de datos
+            $productoFidedigno = \App\Models\Product::find($item['id']);
+
+            if ($productoFidedigno) {
+                $precioVerdadero = $productoFidedigno->price;
+
+                // Sumamos usando el precio real, no el que mandó el cliente
+                $totalReal += ($precioVerdadero * $item['cantidad']);
+
+                // Guardamos los datos limpios para anotar en el pedido
+                $itemsProcesados[] = [
+                    'product_id' => $productoFidedigno->id,
+                    'size' => $item['talle'],
+                    'quantity' => $item['cantidad'],
+                    'price' => $precioVerdadero,
+                ];
+            }
+        }
+
+        // Creamos el pedido usando el total que calculamos nosotros
         $order = Order::create([
             'customer_name' => $request->customer_name,
             'customer_phone' => $request->customer_phone,
             'customer_address' => $request->customer_address,
-            'total' => $request->total,
+            'total' => $totalReal,
             'status' => 'Pendiente',
         ]);
 
-        foreach ($request->items as $item) {
+        // Anotamos las prendas una por una
+        foreach ($itemsProcesados as $itemReal) {
             OrderItem::create([
                 'order_id' => $order->id,
-                'product_id' => $item['id'],
-                'size' => $item['talle'],
-                'quantity' => $item['cantidad'],
-                'price' => $item['precio'],
+                'product_id' => $itemReal['product_id'],
+                'size' => $itemReal['size'],
+                'quantity' => $itemReal['quantity'],
+                'price' => $itemReal['price'],
             ]);
         }
 
         return response()->json(['message' => '¡Pedido creado con éxito!', 'order_id' => $order->id], 201);
     }
 
-    public function update(Request $request, $id)
-    {
-        $order = Order::findOrFail($id);
+   public function update(Request $request, $id)
+{
+    $order = Order::findOrFail($id);
+    $estadoAnterior = $order->status; // Guardamos cómo estaba antes
 
-        $order->update([
-            'status' => $request->status
-        ]);
+    $order->update([
+        'status' => $request->status
+    ]);
 
-        if ($request->status === 'Entregado') {
-            foreach ($order->items as $item) {
-                $product = $item->product;
-                if ($product && $product->stock >= $item->quantity) {
-                    $product->stock = $product->stock - $item->quantity;
-                    $product->save();
-                }
+    // Si recién ahora se entrega, descontamos el stock
+    if ($request->status === 'Entregado' && $estadoAnterior !== 'Entregado') {
+        foreach ($order->items as $item) {
+            $product = $item->product;
+            if ($product && $product->stock >= $item->quantity) {
+                $product->stock = $product->stock - $item->quantity;
+                $product->save();
             }
         }
-
-        return response()->json(['message' => 'Estado actualizado']);
     }
+    // Si estaba entregado y lo cancelan/pasan a pendiente, devolvemos el stock
+    elseif ($estadoAnterior === 'Entregado' && $request->status !== 'Entregado') {
+        foreach ($order->items as $item) {
+            $product = $item->product;
+            if ($product) {
+                $product->stock = $product->stock + $item->quantity;
+                $product->save();
+            }
+        }
+    }
+
+    return response()->json(['message' => 'Estado actualizado']);
+}
 
     // --- NUEVA FUNCIÓN: Para borrar definitivamente ---
     public function destroy($id)
