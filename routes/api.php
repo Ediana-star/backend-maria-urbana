@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\AuthController;
 // --- RUTAS DE SEGURIDAD ---
 Route::post('/setup', [AuthController::class, 'setup']); // Crea el primer admin
 Route::post('/login', [AuthController::class, 'login']); // Inicia sesión
+Route::post('/recover', [AuthController::class, 'recover']); // Recuperar clave
 // ==========================================
 // 🛍️ RUTAS PÚBLICAS (Lo que puede hacer la clienta)
 // ==========================================

@@ -17,13 +17,16 @@ class AuthController extends Controller
 
         $request->validate([
             'email' => 'required|email',
-            'password' => 'required|min:6'
+            'password' => 'required|min:6',
+            'secret_word' => 'required|string|min:3'
         ]);
 
         $user = new User();
         $user->name = 'Administrador';
-        $user->email = trim($request->email); // Limpiamos espacios fantasmas
+        $user->email = trim($request->email);
         $user->password = Hash::make(trim($request->password));
+        // Encriptamos la palabra secreta en minúsculas para mayor seguridad y evitar errores de tipeo
+        $user->secret_word = Hash::make(trim(strtolower($request->secret_word)));
         $user->save();
 
         return response()->json(['message' => '¡Administrador maestro creado con éxito!']);
@@ -39,19 +42,12 @@ class AuthController extends Controller
         $emailLimpio = trim($request->email);
         $claveLimpia = trim($request->password);
 
-        // 1. Buscamos el correo exacto
         $user = User::where('email', $emailLimpio)->first();
 
-        if (!$user) {
+        if (!$user || !Hash::check($claveLimpia, $user->password)) {
             return response()->json(['message' => 'Credenciales inválidas. Verificá tu usuario y contraseña.'], 401);
         }
 
-        // 2. Comparamos la contraseña
-        if (!Hash::check($claveLimpia, $user->password)) {
-            return response()->json(['message' => 'Credenciales inválidas. Verificá tu usuario y contraseña.'], 401);
-        }
-
-        // 3. Si todo está perfecto, imprimimos el Token Sanctum
         $token = $user->createToken('admin-token')->plainTextToken;
 
         return response()->json([
@@ -59,5 +55,30 @@ class AuthController extends Controller
             'token' => $token,
             'user' => $user
         ]);
+    }
+
+    // --- NUEVA FUNCIÓN: Recuperación de contraseña ---
+    public function recover(Request $request)
+    {
+        $request->validate([
+            'email' => 'required|email',
+            'secret_word' => 'required|string',
+            'new_password' => 'required|min:6'
+        ]);
+
+        $user = User::where('email', trim($request->email))->first();
+        $palabraLimpia = trim(strtolower($request->secret_word));
+
+        // Usamos el mismo mensaje genérico para proteger la identidad del administrador
+        if (!$user || !Hash::check($palabraLimpia, $user->secret_word)) {
+            return response()->json(['message' => 'Los datos de recuperación son incorrectos.'], 401);
+        }
+
+        // Si todo coincide, actualizamos la contraseña y destruimos las llaves viejas
+        $user->password = Hash::make(trim($request->new_password));
+        $user->tokens()->delete(); // Obliga a volver a loguearse
+        $user->save();
+
+        return response()->json(['message' => 'Contraseña actualizada. Ya podés iniciar sesión.']);
     }
 }
