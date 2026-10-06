@@ -60,7 +60,7 @@ class ProductController extends Controller
         ], 201);
     }
     // --- FUNCIÓN PARA EDITAR ---
-    public function update(Request $request, $id)
+    public function update(Request $request, int $id)
     {
         // 1. Buscamos el producto en la base de datos
         $product = Product::findOrFail($id);
@@ -83,7 +83,7 @@ class ProductController extends Controller
     }
 
     // --- FUNCIÓN PARA BORRAR ---
-    public function destroy($id)
+    public function destroy(int $id)
     {
         // 1. Buscamos el producto
         $product = Product::findOrFail($id);

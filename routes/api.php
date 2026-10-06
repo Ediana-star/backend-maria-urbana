@@ -6,16 +6,24 @@ use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\AuthController;
 
-// --- RUTAS DE SEGURIDAD ---
-Route::post('/setup', [AuthController::class, 'setup']); // Crea el primer admin
-Route::post('/login', [AuthController::class, 'login']); // Inicia sesión
-Route::post('/recover', [AuthController::class, 'recover']); // Recuperar clave
 // ==========================================
-// 🛍️ RUTAS PÚBLICAS (Lo que puede hacer la clienta)
+// 🔐 RUTAS DE SEGURIDAD (Protegidas contra Fuerza Bruta)
 // ==========================================
-Route::get('/products', [ProductController::class, 'index']);
-Route::post('/orders', [OrderController::class, 'store']); // Crear pedido nuevo
+// Permitimos solo 5 peticiones por minuto para evitar que adivinen contraseñas
+Route::middleware('throttle:5,1')->group(function () {
+    Route::post('/setup', [AuthController::class, 'setup']); // Crea el primer admin
+    Route::post('/login', [AuthController::class, 'login']); // Inicia sesión
+    Route::post('/recover', [AuthController::class, 'recover']); // Recuperar clave
+});
 
+// ==========================================
+// 🛍️️ RUTAS PÚBLICAS (Con protección Anti-DoS)
+// ==========================================
+// Permitimos 30 peticiones por minuto para la navegación de la tienda
+Route::middleware('throttle:30,1')->group(function () {
+    Route::get('/products', [ProductController::class, 'index']);
+    Route::post('/orders', [OrderController::class, 'store']);
+});
 
 // ==========================================
 // 🛡️ RUTAS PROTEGIDAS (Solo el Administrador con Token)
